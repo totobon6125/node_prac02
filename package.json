@@ -1,7 +1,7 @@
 {
   "name": "node_prac02",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "app.js",
   "repository": "https://github.com/totobon6125/node_prac02.git",
   "author": "totobon6125 <totobon6125@gmail.com>",
   "license": "MIT",
