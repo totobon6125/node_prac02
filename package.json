@@ -1,0 +1,16 @@
+{
+  "name": "node_prac02",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/totobon6125/node_prac02.git",
+  "author": "totobon6125 <totobon6125@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@prisma/client": "^5.2.0",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^5.2.0"
+  }
+}
