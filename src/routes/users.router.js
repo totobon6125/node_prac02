@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma/index.js';
 import authMiddleware from '../middlewares/auth.middleware.js';
 
+import { Prisma } from '@prisma/client';
+
 const router = express.Router();
 
 // 💡사용자 회원가입 API
@@ -28,23 +30,31 @@ router.post('/sign-up', async (req, res, next) => {
     // 3. Users 테이블에 email, password를 이용해 사용자를 생성합니다.
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.users.create({
-      data: {
-        email,
-        password: hashedPassword
-      },
+    const [user, userInfo] = await prisma.$transaction(async (tx) => {
+
+      const user = await tx.users.create({
+        data: {
+          email,
+          password: hashedPassword
+        },
+      });
+
+      // 4. UserInfos 테이블에 name, age, gender, profileImage를 이용해 사용자 정보를 생성합니다.
+      const userInfo = await tx.userInfos.create({
+        data: {
+          UserId: user.userId, // 생성한 유저의 userId를 바탕으로 사용자 정보를 생성합니다.
+          name,
+          age,
+          gender: gender.toUpperCase(), // 성별을 대문자로 변환합니다.
+          profileImage,
+        },
+      });
+
+      return [user, userInfo]
+    }, { // 격리 수준 설정 ?? 뭐지??
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted
     });
 
-    // 4. UserInfos 테이블에 name, age, gender, profileImage를 이용해 사용자 정보를 생성합니다.
-    const userInfo = await prisma.userInfos.create({
-      data: {
-        UserId: user.userId, // 생성한 유저의 userId를 바탕으로 사용자 정보를 생성합니다.
-        name,
-        age,
-        gender: gender.toUpperCase(), // 성별을 대문자로 변환합니다.
-        profileImage,
-      },
-    });
 
     return res.status(201).json({ message: '회원가입이 완료되었습니다.' });
   } catch (err) {
@@ -116,6 +126,64 @@ router.get('/users', authMiddleware, async (req, res, next) => {
   // 3. 조회한 사용자의 상세한 정보를 클라이언트에게 반환합니다.
   return res.status(200).json({ data: user });
 })
+
+
+/** 사용자 정보 변경 API **/
+router.patch('/users/', authMiddleware, async (req, res, next) => {
+  try {
+    // 1. 게시글을 작성하려는 클라이언트가 로그인된 사용자인지 검증합니다.
+    const { userId } = req.user;
+
+    // 2. 변경할 사용자 정보 `name`, `age`, `gender`, `profileImage`를 **body**로 전달받습니다.
+    const updatedData = req.body;
+
+    // 3. **사용자 정보(UserInofes) 테이블**에서 **사용자의 정보들**을 수정합니다.
+    // 수정되기 전 사용자의 정보 데이터 조회
+    const userInfo = await prisma.userInfos.findFirst({
+      where: { UserId: +userId },
+    });
+
+    await prisma.$transaction(
+      async (tx) => {
+        // 트랜잭션 내부에서 사용자 정보를 수정합니다.
+        await tx.userInfos.update({
+          data: {
+            ...updatedData,
+          },
+          where: {
+            UserId: userInfo.UserId,
+          },
+        });
+
+
+        // 4. 사용자의 **변경된 정보 이력**을 **사용자 히스토리(UserHistories)** 테이블에 저장합니다.
+        for (let key in updatedData) {
+          // 변경된 정보가 있는 경우
+          if (userInfo[key] !== updatedData[key]) {
+            await tx.userHistories.create({
+              data: {
+                UserId: userInfo.UserId,
+                changedField: key,
+                oldValue: String(userInfo[key]), // 변경되기 전 사용자의 데이터
+                newValue: String(updatedData[key]), // 변경되고 난 뒤의 사용자의 데이터
+              },
+            });
+          }
+        }
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      },
+    );
+
+    // 5. 사용자 정보 변경 API를 완료합니다.
+    return res
+      .status(200)
+      .json({ message: '사용자 정보 변경에 성공하였습니다.' });
+  } catch (err) {
+    next(err);
+  }
+});
 
 
 export default router;
